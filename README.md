@@ -1,27 +1,203 @@
 # nbctx
 
-`nbctx` is an agent-friendly command line tool for inspecting, summarizing, searching, and safely editing local Jupyter notebooks.
+`nbctx` is a command line tool for inspecting, searching, and safely editing Jupyter notebooks.
+
+It is built for developers and coding agents that need to work with `.ipynb` files without writing one-off notebook parsing scripts. `nbctx` reads and writes notebooks with `nbformat`, gives cells stable IDs, and returns structured JSON by default.
 
 V1 focuses on notebook structure and cell manipulation. It does not execute notebook code.
 
-## Install for development
+## Install
+
+With `pip`:
 
 ```bash
-uv sync
+pip install nbctx
 ```
 
-## Usage
+With `pipx`:
 
 ```bash
-uv run nbctx inspect NOTEBOOK.ipynb
-uv run nbctx cells NOTEBOOK.ipynb --format markdown
-uv run nbctx show NOTEBOOK.ipynb --cell CELL_ID
-uv run nbctx search NOTEBOOK.ipynb QUERY
-uv run nbctx append NOTEBOOK.ipynb --type code --source -
-uv run nbctx replace NOTEBOOK.ipynb --cell CELL_ID --source new_source.py
-uv run nbctx insert NOTEBOOK.ipynb --after CELL_ID --type markdown --source notes.md
-uv run nbctx validate NOTEBOOK.ipynb
-uv run nbctx index NOTEBOOK.ipynb
+pipx install nbctx
 ```
 
-Default output is JSON. Commands with readable summaries also support `--format markdown`.
+With `uv`:
+
+```bash
+uv tool install nbctx
+```
+
+From GitHub:
+
+```bash
+pip install git+https://github.com/alexmuchau/nbctx-cli.git
+```
+
+## Quick Start
+
+Inspect a notebook:
+
+```bash
+nbctx inspect notebook.ipynb
+```
+
+List cells:
+
+```bash
+nbctx cells notebook.ipynb
+```
+
+Search all cell sources:
+
+```bash
+nbctx search notebook.ipynb "train_test_split"
+```
+
+Show one cell by stable ID:
+
+```bash
+nbctx show notebook.ipynb --cell nbctx-a1b2c3d4e5f6
+```
+
+Validate notebook safety:
+
+```bash
+nbctx validate notebook.ipynb
+```
+
+## Commands
+
+### `inspect`
+
+Print notebook metadata, cell counts, kernel info, language info, and a compact structure preview.
+
+```bash
+nbctx inspect notebook.ipynb
+```
+
+### `cells`
+
+List cells with stable ID, index, type, tags, execution count, source length, and first lines.
+
+```bash
+nbctx cells notebook.ipynb
+```
+
+Use markdown output for a readable overview:
+
+```bash
+nbctx cells notebook.ipynb --format markdown
+```
+
+### `show`
+
+Show the full source for one cell.
+
+```bash
+nbctx show notebook.ipynb --cell nbctx-a1b2c3d4e5f6
+```
+
+### `search`
+
+Search code and markdown cells. Results include matching cell IDs, indexes, types, and snippets.
+
+```bash
+nbctx search notebook.ipynb "accuracy"
+```
+
+### `append`
+
+Append a new code or markdown cell from a file:
+
+```bash
+nbctx append notebook.ipynb --type code --source analysis.py
+```
+
+Append from stdin:
+
+```bash
+printf 'print("hello")\n' | nbctx append notebook.ipynb --type code --source -
+```
+
+### `insert`
+
+Insert a new cell after another cell by stable ID.
+
+```bash
+nbctx insert notebook.ipynb --after nbctx-a1b2c3d4e5f6 --type markdown --source notes.md
+```
+
+### `replace`
+
+Replace one cell's source by stable ID.
+
+```bash
+nbctx replace notebook.ipynb --cell nbctx-a1b2c3d4e5f6 --source updated_cell.py
+```
+
+### `validate`
+
+Check that the notebook is readable, has valid cell structure, and does not contain duplicate stable IDs.
+
+```bash
+nbctx validate notebook.ipynb
+```
+
+### `index`
+
+Add stable IDs to cells that are missing them and generate lightweight context files under `.notebook-cli/`.
+
+```bash
+nbctx index notebook.ipynb
+```
+
+Generated files:
+
+- `.notebook-cli/<notebook-name>/cell-map.json`
+- `.notebook-cli/<notebook-name>/summary.md`
+- `.notebook-cli/<notebook-name>/notes.md`
+
+The notebook remains the source of truth.
+
+## Output Formats
+
+Default output is JSON:
+
+```bash
+nbctx search notebook.ipynb "loss"
+```
+
+Use markdown when you want readable context for humans:
+
+```bash
+nbctx inspect notebook.ipynb --format markdown
+```
+
+Many JSON responses include a `markdown` field so tools can consume structured data and still display a readable summary.
+
+## Stable Cell IDs
+
+Notebook cell indexes are fragile because they change when cells are inserted or deleted. `nbctx` uses stable IDs stored in cell metadata:
+
+```json
+{
+  "metadata": {
+    "nbctx": {
+      "id": "nbctx-a1b2c3d4e5f6"
+    }
+  }
+}
+```
+
+Use `nbctx index notebook.ipynb` to add missing IDs.
+
+## Safe Editing Workflow
+
+For manual work or agent workflows:
+
+1. Run `nbctx inspect notebook.ipynb`.
+2. Run `nbctx cells notebook.ipynb`.
+3. Use `nbctx show` before replacing a cell.
+4. Edit with `append`, `insert`, or `replace`.
+5. Run `nbctx validate notebook.ipynb`.
+
+This keeps edits targeted and avoids relying on fragile cell indexes.
