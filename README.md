@@ -1,5 +1,7 @@
 # nbctx
 
+[![skills.sh](https://skills.sh/b/alexmuchau/nbctx-cli)](https://skills.sh/alexmuchau/nbctx-cli)
+
 `nbctx` is a command line tool for inspecting, searching, and safely editing Jupyter notebooks.
 
 It is built for developers and coding agents that need to work with `.ipynb` files without writing one-off notebook parsing scripts. `nbctx` reads and writes notebooks with `nbformat`, gives cells stable IDs, and returns structured JSON by default.
@@ -31,6 +33,16 @@ From GitHub:
 ```bash
 pip install git+https://github.com/alexmuchau/nbctx-cli.git
 ```
+
+## Codex Skill
+
+Install the reusable Codex skill from this repository with:
+
+```bash
+npx skills add alexmuchau/nbctx-cli --skill nbctx-notebook-cli -a codex
+```
+
+The skill helps agents inspect `.ipynb` files, search notebook sources, work with stable cell IDs, validate notebook structure, and make safe cell edits without executing notebook code.
 
 ## Quick Start
 
