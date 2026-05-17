@@ -1,11 +1,27 @@
 ---
 name: nbctx-notebook-cli
-description: Use nbctx to inspect, summarize, search, and safely edit Jupyter notebooks without writing custom notebook-parsing scripts.
+description: Use nbctx when you need to inspect or search `.ipynb` files, work with stable Jupyter cell IDs, validate notebook structure, or make safe cell edits without executing notebook code.
 ---
 
 # nbctx Notebook CLI
 
-Use `nbctx` when working with local `.ipynb` files. Prefer it over ad hoc Python scripts for notebook inspection and cell edits.
+Use `nbctx` when working with local `.ipynb` files in any repository. Prefer it over ad hoc Python scripts for notebook inspection, search, validation, and cell edits.
+
+## Prerequisites
+
+Check whether `nbctx` is already installed:
+
+```bash
+command -v nbctx
+```
+
+If it is missing, install it with one of:
+
+```bash
+uv tool install nbctx
+pipx install nbctx
+pip install nbctx
+```
 
 ## Workflow
 
@@ -36,3 +52,5 @@ nbctx index NOTEBOOK.ipynb
 ```
 
 Run `nbctx index NOTEBOOK.ipynb` only when a durable `.notebook-cli/` context folder is useful. The notebook remains the source of truth.
+
+`nbctx` reads and writes notebooks with `nbformat`, but it does not execute notebook code.
