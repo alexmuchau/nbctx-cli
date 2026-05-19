@@ -34,12 +34,12 @@ From GitHub:
 pip install git+https://github.com/alexmuchau/nbctx-cli.git
 ```
 
-## Codex Skill
+## Agent Skill
 
-Install the reusable Codex skill from this repository with:
+Install the reusable Agent skill from this repository with:
 
 ```bash
-npx skills add alexmuchau/nbctx-cli --skill nbctx-notebook-cli -a codex
+npx skills add alexmuchau/nbctx-cli --skill nbctx-notebook-cli
 ```
 
 The skill helps agents inspect `.ipynb` files, search notebook sources, work with stable cell IDs, validate notebook structure, and make safe cell edits without executing notebook code.

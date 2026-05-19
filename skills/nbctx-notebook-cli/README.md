@@ -1,13 +1,13 @@
 # nbctx-notebook-cli
 
-`nbctx-notebook-cli` is a Codex skill for inspecting, searching, validating, and safely editing Jupyter notebooks with `nbctx`.
+`nbctx-notebook-cli` is a agent skill for inspecting, searching, validating, and safely editing Jupyter notebooks with `nbctx`.
 
 It works in any repository that contains local `.ipynb` files. `nbctx` reads and writes notebooks with `nbformat` and does not execute notebook code.
 
 ## Install the Skill
 
 ```bash
-npx skills add alexmuchau/nbctx-cli --skill nbctx-notebook-cli -a codex
+npx skills add alexmuchau/nbctx-cli --skill nbctx-notebook-cli
 ```
 
 ## Install `nbctx`
