@@ -75,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = add_notebook_command(subparsers, "validate", "Validate notebook structure and nbctx IDs.")
     add_format(validate_parser)
 
-    index_parser = add_notebook_command(subparsers, "index", "Generate .notebook-cli context files.")
+    index_parser = add_notebook_command(subparsers, "index", "Add missing stable IDs and generate context files.")
     add_format(index_parser)
 
     return parser
