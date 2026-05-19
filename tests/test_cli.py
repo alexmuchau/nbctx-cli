@@ -6,7 +6,7 @@ from pathlib import Path
 import nbformat
 import pytest
 
-from nbctx.cli import main
+from nbctx.cli import build_parser, main
 from nbctx.notebooks import read_notebook, stable_id
 
 
@@ -93,3 +93,9 @@ def test_malformed_notebook_rejected(capsys: pytest.CaptureFixture[str], tmp_pat
     error = json.loads(capsys.readouterr().err)
     assert not error["ok"]
     assert "Could not read notebook" in error["error"]
+
+
+def test_index_help_mentions_stable_ids() -> None:
+    parser = build_parser()
+    help_text = parser.format_help()
+    assert "Add missing stable IDs and generate context files." in help_text

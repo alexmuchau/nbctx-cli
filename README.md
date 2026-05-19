@@ -156,7 +156,7 @@ nbctx validate notebook.ipynb
 
 ### `index`
 
-Add stable IDs to cells that are missing them and generate lightweight context files under `.notebook-cli/`.
+Add stable nbctx IDs to cells that are missing them and generate lightweight context files under `.notebook-cli/`.
 
 ```bash
 nbctx index notebook.ipynb
@@ -200,7 +200,12 @@ Notebook cell indexes are fragile because they change when cells are inserted or
 }
 ```
 
-Use `nbctx index notebook.ipynb` to add missing IDs.
+Jupyter `cell.id` values are not the same as stable nbctx IDs. If `inspect`, `cells`, or `validate` shows missing stable nbctx IDs, run:
+
+```bash
+nbctx index notebook.ipynb
+nbctx validate notebook.ipynb
+```
 
 ## Safe Editing Workflow
 

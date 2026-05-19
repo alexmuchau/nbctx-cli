@@ -30,8 +30,11 @@ pip install nbctx
 
 1. Run `nbctx inspect NOTEBOOK.ipynb`.
 2. Run `nbctx cells NOTEBOOK.ipynb`.
-3. Run `nbctx show NOTEBOOK.ipynb --cell CELL_ID` before replacing a cell.
-4. Edit with `nbctx append`, `nbctx insert`, or `nbctx replace`.
-5. Run `nbctx validate NOTEBOOK.ipynb`.
+3. If `inspect`, `cells`, or `validate` reports missing stable nbctx IDs, run `nbctx index NOTEBOOK.ipynb`, then run `nbctx validate NOTEBOOK.ipynb`.
+4. Run `nbctx show NOTEBOOK.ipynb --cell CELL_ID` before replacing a cell.
+5. Edit with `nbctx append`, `nbctx insert`, or `nbctx replace`.
+6. Run `nbctx validate NOTEBOOK.ipynb`.
 
-Use stable cell IDs from `metadata.nbctx.id` instead of notebook indexes, and run `nbctx index NOTEBOOK.ipynb` when you need to add missing IDs or generate `.notebook-cli/` context files.
+Use stable cell IDs from `metadata.nbctx.id` instead of notebook indexes. Jupyter `cell.id` values are different from stable nbctx IDs.
+
+Run `nbctx index NOTEBOOK.ipynb` when you need to add missing stable nbctx IDs or generate `.notebook-cli/` context files.
