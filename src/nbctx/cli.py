@@ -15,6 +15,7 @@ from .notebooks import (
     list_cells,
     read_notebook,
     read_source,
+    repair_notebook_file,
     replace_cell_source,
     search_notebook,
     show_cell,
@@ -75,6 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = add_notebook_command(subparsers, "validate", "Validate notebook structure and nbctx IDs.")
     add_format(validate_parser)
 
+    repair_parser = add_notebook_command(subparsers, "repair", "Repair known safe notebook inconsistencies.")
+    repair_parser.add_argument("--dry-run", action="store_true", help="Report repairs without writing the notebook.")
+    add_format(repair_parser)
+
     index_parser = add_notebook_command(subparsers, "index", "Add missing stable IDs and generate context files.")
     add_format(index_parser)
 
@@ -109,6 +114,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         return insert_cell(path, args.after, args.type, read_source(args.source))
     if args.command == "validate":
         return validation_to_dict(validate_notebook(path))
+    if args.command == "repair":
+        return repair_notebook_file(path, dry_run=args.dry_run)
     if args.command == "index":
         return index_notebook(path)
     raise NbctxError(f"Unknown command: {args.command}")

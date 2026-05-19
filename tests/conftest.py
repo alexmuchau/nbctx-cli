@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import nbformat
@@ -49,4 +50,25 @@ def missing_ids_notebook(tmp_path: Path) -> Path:
     )
     path = tmp_path / "missing.ipynb"
     nbformat.write(notebook, path)
+    return path
+
+
+@pytest.fixture
+def missing_stream_name_notebook(tmp_path: Path) -> Path:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_code_cell("print('hello')"),
+        ]
+    )
+    set_stable_id(notebook.cells[0], "nbctx-code")
+    notebook.cells[0]["execution_count"] = 3
+    notebook.cells[0]["outputs"] = [
+        nbformat.v4.new_output("stream", name="stdout", text="hello\n"),
+    ]
+    path = tmp_path / "missing-stream-name.ipynb"
+    nbformat.write(notebook, path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["cells"][0]["outputs"][0]["name"]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path

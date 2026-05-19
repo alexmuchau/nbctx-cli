@@ -11,6 +11,8 @@ from nbctx.notebooks import (
     inspect_notebook,
     list_cells,
     read_notebook,
+    repair_notebook_file,
+    insert_cell,
     replace_cell_source,
     search_notebook,
     set_stable_id,
@@ -62,6 +64,22 @@ def test_append_preserves_existing_output(mixed_notebook: Path) -> None:
     assert notebook.cells[1]["execution_count"] == 7
 
 
+def test_repair_file_preserves_stream_text_and_stable_ids(missing_stream_name_notebook: Path) -> None:
+    result = repair_notebook_file(missing_stream_name_notebook)
+    notebook = nbformat.read(missing_stream_name_notebook, as_version=4)
+    assert result["changed"]
+    assert notebook.cells[0]["outputs"][0]["name"] == "stdout"
+    assert notebook.cells[0]["outputs"][0]["text"] == "hello\n"
+    assert notebook.cells[0]["execution_count"] == 3
+    assert stable_id(notebook.cells[0]) == "nbctx-code"
+
+
+def test_validate_succeeds_after_repair(missing_stream_name_notebook: Path) -> None:
+    repair_notebook_file(missing_stream_name_notebook)
+    result = validate_notebook(missing_stream_name_notebook)
+    assert result.ok
+
+
 def test_replace_preserves_metadata_outputs_and_execution_count(mixed_notebook: Path) -> None:
     replace_cell_source(mixed_notebook, "nbctx-code", "print('changed')")
     notebook = read_notebook(mixed_notebook)
@@ -69,6 +87,32 @@ def test_replace_preserves_metadata_outputs_and_execution_count(mixed_notebook: 
     assert stable_id(notebook.cells[1]) == "nbctx-code"
     assert notebook.cells[1]["outputs"][0]["text"] == "hello\n"
     assert notebook.cells[1]["execution_count"] == 7
+
+
+def test_append_auto_repairs_before_writing(missing_stream_name_notebook: Path) -> None:
+    result = append_cell(missing_stream_name_notebook, "markdown", "## Added")
+    notebook = nbformat.read(missing_stream_name_notebook, as_version=4)
+    assert result["repairs"]["changed"]
+    assert notebook.cells[0]["outputs"][0]["name"] == "stdout"
+    assert notebook.cells[0]["outputs"][0]["text"] == "hello\n"
+    assert notebook.cells[1]["source"] == "## Added"
+
+
+def test_insert_auto_repairs_before_writing(missing_stream_name_notebook: Path) -> None:
+    result = insert_cell(missing_stream_name_notebook, "nbctx-code", "markdown", "Inserted")
+    notebook = nbformat.read(missing_stream_name_notebook, as_version=4)
+    assert result["repairs"]["changed"]
+    assert notebook.cells[0]["outputs"][0]["name"] == "stdout"
+    assert notebook.cells[1]["source"] == "Inserted"
+
+
+def test_replace_auto_repairs_before_writing(missing_stream_name_notebook: Path) -> None:
+    result = replace_cell_source(missing_stream_name_notebook, "nbctx-code", "print('changed')")
+    notebook = nbformat.read(missing_stream_name_notebook, as_version=4)
+    assert result["repairs"]["changed"]
+    assert notebook.cells[0]["source"] == "print('changed')"
+    assert notebook.cells[0]["outputs"][0]["name"] == "stdout"
+    assert notebook.cells[0]["outputs"][0]["text"] == "hello\n"
 
 
 def test_validate_detects_duplicate_stable_ids(tmp_path: Path) -> None:
@@ -100,3 +144,11 @@ def test_index_creates_context_and_adds_missing_ids(missing_ids_notebook: Path) 
     notebook = read_notebook(missing_ids_notebook)
     assert stable_id(notebook.cells[0]) is not None
     assert stable_id(notebook.cells[1]) is not None
+
+
+def test_index_auto_repairs_before_writing(missing_stream_name_notebook: Path) -> None:
+    result = index_notebook(missing_stream_name_notebook)
+    notebook = nbformat.read(missing_stream_name_notebook, as_version=4)
+    assert result["repairs"]["changed"]
+    assert notebook.cells[0]["outputs"][0]["name"] == "stdout"
+    assert notebook.cells[0]["outputs"][0]["text"] == "hello\n"
