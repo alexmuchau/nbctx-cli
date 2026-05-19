@@ -25,6 +25,33 @@ def test_cells_markdown_output(capsys: pytest.CaptureFixture[str], mixed_noteboo
     assert "`nbctx-code`" in output
 
 
+def test_section_json_output_shape(capsys: pytest.CaptureFixture[str], mixed_notebook: Path) -> None:
+    assert main(["section", str(mixed_notebook), "# Title"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["query"] == "# Title"
+    assert output["section_count"] == 1
+    assert output["cell_count"] == 1
+    assert output["sections"][0]["heading"] == {
+        "id": "nbctx-markdown",
+        "index": 0,
+        "level": 1,
+        "text": "Title",
+    }
+    assert output["sections"][0]["cells"][0]["source"] == "import pandas as pd\npd.DataFrame({'x': [1, 2]})"
+    assert "markdown" in output
+
+
+def test_section_markdown_output(capsys: pytest.CaptureFixture[str], mixed_notebook: Path) -> None:
+    assert main(["section", str(mixed_notebook), "# Title", "--format", "markdown"]) == 0
+    output = capsys.readouterr().out
+    assert output.startswith("# Section: # Title")
+    assert "- Sections: 1" in output
+    assert "- Cells: 1" in output
+    assert "## 0: `nbctx-markdown` (level 1) Title" in output
+    assert "### 1: `nbctx-code` (code)" in output
+    assert "```python" in output
+
+
 def test_append_from_file(capsys: pytest.CaptureFixture[str], tmp_path: Path, empty_notebook: Path) -> None:
     source = tmp_path / "cell.py"
     source.write_text("print('from file')", encoding="utf-8")
@@ -174,4 +201,5 @@ def test_index_help_mentions_stable_ids() -> None:
     parser = build_parser()
     help_text = parser.format_help()
     assert "Add missing stable IDs and generate context files." in help_text
+    assert "Extract cells inside markdown heading sections." in help_text
     assert "repair" in help_text

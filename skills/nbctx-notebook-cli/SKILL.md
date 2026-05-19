@@ -1,11 +1,11 @@
 ---
 name: nbctx-notebook-cli
-description: Use nbctx whenever the user asks to inspect, summarize, search, validate, index, or safely edit local `.ipynb` notebooks. This skill is especially important for notebook work that needs stable `metadata.nbctx.id` cell references, missing-ID remediation, append/insert/replace operations, or JSON/markdown notebook summaries without executing notebook code.
+description: Use nbctx whenever the user asks to inspect, summarize, search, extract markdown sections, validate, index, or safely edit local `.ipynb` notebooks. This skill is especially important for notebook work that needs stable `metadata.nbctx.id` cell references, deterministic heading-section extraction, missing-ID remediation, append/insert/replace operations, or JSON/markdown notebook summaries without executing notebook code.
 ---
 
 # nbctx Notebook CLI
 
-Use `nbctx` when working with local `.ipynb` files in any repository. Prefer it over ad hoc Python scripts for notebook inspection, search, validation, and cell edits.
+Use `nbctx` when working with local `.ipynb` files in any repository. Prefer it over ad hoc Python scripts for notebook inspection, search, markdown section extraction, validation, and cell edits.
 
 ## Prerequisites
 
@@ -26,11 +26,12 @@ pip install nbctx
 ## Workflow
 
 1. Run `nbctx inspect NOTEBOOK.ipynb` and `nbctx cells NOTEBOOK.ipynb` before editing.
-2. If `inspect`, `cells`, or `validate` reports missing stable nbctx IDs, run `nbctx index NOTEBOOK.ipynb`, then run `nbctx validate NOTEBOOK.ipynb`.
-3. Refer to cells by stable nbctx ID, not by fragile notebook index.
-4. Run `nbctx show NOTEBOOK.ipynb --cell CELL_ID` before replacing a cell.
-5. Use `nbctx append`, `nbctx insert`, or `nbctx replace` for notebook edits.
-6. Run `nbctx validate NOTEBOOK.ipynb` after edits.
+2. Use `nbctx section NOTEBOOK.ipynb "HEADING"` when the user needs all cells under a markdown heading.
+3. If `inspect`, `cells`, or `validate` reports missing stable nbctx IDs, run `nbctx index NOTEBOOK.ipynb`, then run `nbctx validate NOTEBOOK.ipynb`.
+4. Refer to cells by stable nbctx ID, not by fragile notebook index.
+5. Run `nbctx show NOTEBOOK.ipynb --cell CELL_ID` before replacing a cell.
+6. Use `nbctx append`, `nbctx insert`, or `nbctx replace` for notebook edits.
+7. Run `nbctx validate NOTEBOOK.ipynb` after edits.
 
 ## Stable IDs
 
@@ -89,6 +90,17 @@ nbctx search NOTEBOOK.ipynb "QUERY" --format markdown
 ```
 
 Use a non-empty, specific query. After search finds candidates, run `show` on the chosen cell before editing.
+
+### `section`
+
+Use `section` to extract all cells inside markdown ATX heading sections without executing code or mutating the notebook. This is the best command when a user asks for the contents of a named notebook section.
+
+```bash
+nbctx section NOTEBOOK.ipynb "## Results"
+nbctx section NOTEBOOK.ipynb "Results" --format markdown
+```
+
+Queries with heading markers require the same heading level, so `"## Results"` does not match `# Results`. Plain text queries such as `"Results"` match any heading level with the same normalized text. Results include the matched heading metadata plus body cells with stable nbctx ID, index, type, and full source. Missing stable IDs are reported as `null`; `section` does not add IDs.
 
 ### `append`
 

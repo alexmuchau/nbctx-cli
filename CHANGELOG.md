@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add read-only `nbctx section` to extract cells inside markdown ATX heading sections without executing code or changing stable IDs.
 - Add `nbctx repair` with `--dry-run` to fix known safe notebook inconsistencies, starting with code-cell `stream` outputs missing `name`.
 - Distinguish malformed JSON errors from valid JSON notebooks that fail notebook schema/structure validation.
 - Auto-apply known safe repairs before `append`, `insert`, `replace`, and `index` write notebooks; these commands now include `repairs` metadata when repairs are applied.

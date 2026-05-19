@@ -18,6 +18,7 @@ from .notebooks import (
     repair_notebook_file,
     replace_cell_source,
     search_notebook,
+    section_notebook,
     show_cell,
     validate_notebook,
     validation_to_dict,
@@ -56,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser = add_notebook_command(subparsers, "search", "Search code and markdown cell source.")
     search_parser.add_argument("query", help="Search query.")
     add_format(search_parser)
+
+    section_parser = add_notebook_command(subparsers, "section", "Extract cells inside markdown heading sections.")
+    section_parser.add_argument("query", help="Markdown heading text or ATX heading query.")
+    add_format(section_parser)
 
     append_parser = add_notebook_command(subparsers, "append", "Append a new code or markdown cell.")
     append_parser.add_argument("--type", choices=["code", "markdown"], required=True)
@@ -106,6 +111,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         return show_cell(read_notebook(path), args.cell)
     if args.command == "search":
         return search_notebook(read_notebook(path), args.query)
+    if args.command == "section":
+        return section_notebook(read_notebook(path), args.query)
     if args.command == "append":
         return append_cell(path, args.type, read_source(args.source))
     if args.command == "replace":

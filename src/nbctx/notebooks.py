@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import uuid
 from copy import deepcopy
@@ -16,6 +17,8 @@ from .errors import NbctxError
 NBCTX_METADATA_KEY = "nbctx"
 NBCTX_ID_KEY = "id"
 PREVIEW_CHARS = 120
+ATX_HEADING_RE = re.compile(r"^[ \t]{0,3}(#{1,6})(?:[ \t]+|$)(.*?)[ \t]*$")
+ATX_CLOSING_RE = re.compile(r"^(.*?)(?:[ \t]+#+[ \t]*)$")
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,15 @@ class RepairResult:
     changed: bool
     changes: list[str]
     warnings: list[str]
+
+
+@dataclass(frozen=True)
+class AtxHeading:
+    index: int
+    id: str | None
+    level: int
+    text: str
+    normalized: str
 
 
 def read_notebook(path: Path) -> Any:
@@ -302,6 +314,116 @@ def search_notebook(notebook: Any, query: str) -> dict[str, Any]:
     return result
 
 
+def section_notebook(notebook: Any, query: str) -> dict[str, Any]:
+    query_level, query_text = parse_heading_query(query)
+    sections: list[dict[str, Any]] = []
+    headings_by_index = markdown_headings_by_index(notebook)
+
+    for heading in all_markdown_headings(notebook):
+        if query_level is not None and heading.level != query_level:
+            continue
+        if heading.normalized != query_text:
+            continue
+
+        cells: list[dict[str, Any]] = []
+        for index in range(heading.index + 1, len(notebook.cells)):
+            boundary_headings = headings_by_index.get(index, [])
+            if any(candidate.level <= heading.level for candidate in boundary_headings):
+                break
+            cells.append(section_cell_record(index, notebook.cells[index]))
+
+        sections.append(
+            {
+                "heading": {
+                    "id": heading.id,
+                    "index": heading.index,
+                    "level": heading.level,
+                    "text": heading.text,
+                },
+                "cells": cells,
+                "cell_count": len(cells),
+            }
+        )
+
+    result = {
+        "query": query,
+        "sections": sections,
+        "section_count": len(sections),
+        "cell_count": sum(section["cell_count"] for section in sections),
+    }
+    result["markdown"] = render_section_markdown(result)
+    return result
+
+
+def parse_heading_query(query: str) -> tuple[int | None, str]:
+    headings = parse_atx_headings(query)
+    if headings:
+        heading = headings[0]
+        return heading.level, heading.normalized
+    return None, normalize_heading_text(query)
+
+
+def all_markdown_headings(notebook: Any) -> list[AtxHeading]:
+    headings: list[AtxHeading] = []
+    for index, cell in enumerate(notebook.cells):
+        if cell.get("cell_type") != "markdown":
+            continue
+        for heading in parse_atx_headings(cell.get("source", "")):
+            headings.append(
+                AtxHeading(
+                    index=index,
+                    id=stable_id(cell),
+                    level=heading.level,
+                    text=heading.text,
+                    normalized=heading.normalized,
+                )
+            )
+    return headings
+
+
+def markdown_headings_by_index(notebook: Any) -> dict[int, list[AtxHeading]]:
+    headings_by_index: dict[int, list[AtxHeading]] = {}
+    for heading in all_markdown_headings(notebook):
+        headings_by_index.setdefault(heading.index, []).append(heading)
+    return headings_by_index
+
+
+def parse_atx_headings(source: str) -> list[AtxHeading]:
+    headings: list[AtxHeading] = []
+    for line in source.splitlines():
+        match = ATX_HEADING_RE.match(line)
+        if not match:
+            continue
+        raw_text = strip_optional_closing_hashes(match.group(2))
+        text = display_heading_text(raw_text)
+        headings.append(AtxHeading(index=-1, id=None, level=len(match.group(1)), text=text, normalized=text.lower()))
+    return headings
+
+
+def strip_optional_closing_hashes(text: str) -> str:
+    closing_match = ATX_CLOSING_RE.match(text)
+    if closing_match:
+        return closing_match.group(1)
+    return text
+
+
+def display_heading_text(text: str) -> str:
+    return " ".join(text.strip().split())
+
+
+def normalize_heading_text(text: str) -> str:
+    return display_heading_text(strip_optional_closing_hashes(text)).lower()
+
+
+def section_cell_record(index: int, cell: Any) -> dict[str, Any]:
+    return {
+        "id": stable_id(cell),
+        "index": index,
+        "type": cell.get("cell_type"),
+        "source": cell.get("source", ""),
+    }
+
+
 def matching_snippets(source: str, query_lower: str, context: int = 60) -> list[str]:
     source_lower = source.lower()
     snippets: list[str] = []
@@ -507,6 +629,39 @@ def render_search_markdown(result: dict[str, Any]) -> str:
             lines.append(f"- `{snippet}`")
         lines.append("")
     return "\n".join(lines)
+
+
+def render_section_markdown(result: dict[str, Any]) -> str:
+    lines = [
+        f"# Section: {result['query']}",
+        "",
+        f"- Sections: {result['section_count']}",
+        f"- Cells: {result['cell_count']}",
+        "",
+    ]
+    for section in result["sections"]:
+        heading = section["heading"]
+        heading_id = heading["id"] or "(missing nbctx id)"
+        lines.append(f"## {heading['index']}: `{heading_id}` (level {heading['level']}) {heading['text']}")
+        lines.append("")
+        for cell in section["cells"]:
+            cell_id = cell["id"] or "(missing nbctx id)"
+            fence = cell_source_fence(cell["type"])
+            lines.append(f"### {cell['index']}: `{cell_id}` ({cell['type']})")
+            lines.append("")
+            lines.append(f"```{fence}")
+            lines.append(cell["source"])
+            lines.append("```")
+            lines.append("")
+    return "\n".join(lines)
+
+
+def cell_source_fence(cell_type: str | None) -> str:
+    if cell_type == "code":
+        return "python"
+    if cell_type == "markdown":
+        return "markdown"
+    return ""
 
 
 def render_validation_markdown(result: dict[str, Any]) -> str:

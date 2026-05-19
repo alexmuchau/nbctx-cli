@@ -64,6 +64,12 @@ Search all cell sources:
 nbctx search notebook.ipynb "train_test_split"
 ```
 
+Extract cells inside a markdown section:
+
+```bash
+nbctx section notebook.ipynb "## Model Evaluation"
+```
+
 Show one cell by stable ID:
 
 ```bash
@@ -121,6 +127,17 @@ Search code and markdown cells. Results include matching cell IDs, indexes, type
 ```bash
 nbctx search notebook.ipynb "accuracy"
 ```
+
+### `section`
+
+Extract the cells inside markdown ATX heading sections. Queries can include heading markers to require a specific level, or plain heading text to match any level.
+
+```bash
+nbctx section notebook.ipynb "## Results"
+nbctx section notebook.ipynb "Results" --format markdown
+```
+
+The command is read-only: it uses existing stable nbctx IDs, reports missing IDs as `null`, does not execute code, and does not add or change notebook metadata.
 
 ### `append`
 

@@ -15,6 +15,7 @@ from nbctx.notebooks import (
     insert_cell,
     replace_cell_source,
     search_notebook,
+    section_notebook,
     set_stable_id,
     stable_id,
     validate_notebook,
@@ -53,6 +54,121 @@ def test_search_returns_matching_cells(mixed_notebook: Path) -> None:
     result = search_notebook(read_notebook(mixed_notebook), "pandas")
     assert result["match_count"] == 2
     assert {match["id"] for match in result["matches"]} == {"nbctx-markdown", "nbctx-code"}
+
+
+def test_section_returns_cells_until_next_sibling_heading(tmp_path: Path) -> None:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_markdown_cell("# Title 1"),
+            nbformat.v4.new_markdown_cell("Intro"),
+            nbformat.v4.new_markdown_cell("## Title 2"),
+            nbformat.v4.new_markdown_cell("Body"),
+            nbformat.v4.new_code_cell("c = 3"),
+            nbformat.v4.new_markdown_cell("### Child"),
+            nbformat.v4.new_code_cell("nested = True"),
+            nbformat.v4.new_markdown_cell("## Next"),
+            nbformat.v4.new_code_cell("outside = True"),
+        ]
+    )
+    for index, cell in enumerate(notebook.cells):
+        set_stable_id(cell, f"nbctx-cell-{index}")
+
+    result = section_notebook(notebook, "## Title 2")
+
+    assert result["section_count"] == 1
+    assert result["cell_count"] == 4
+    section = result["sections"][0]
+    assert section["heading"] == {"id": "nbctx-cell-2", "index": 2, "level": 2, "text": "Title 2"}
+    assert [cell["id"] for cell in section["cells"]] == [
+        "nbctx-cell-3",
+        "nbctx-cell-4",
+        "nbctx-cell-5",
+        "nbctx-cell-6",
+    ]
+    assert section["cells"][1]["source"] == "c = 3"
+
+
+def test_section_parent_includes_nested_subsections(tmp_path: Path) -> None:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_markdown_cell("# Title 1"),
+            nbformat.v4.new_markdown_cell("Intro"),
+            nbformat.v4.new_markdown_cell("## Child"),
+            nbformat.v4.new_code_cell("inside = True"),
+            nbformat.v4.new_markdown_cell("# Outside"),
+            nbformat.v4.new_code_cell("outside = True"),
+        ]
+    )
+    for index, cell in enumerate(notebook.cells):
+        set_stable_id(cell, f"nbctx-parent-{index}")
+
+    result = section_notebook(notebook, "# Title 1")
+
+    assert result["section_count"] == 1
+    assert [cell["index"] for cell in result["sections"][0]["cells"]] == [1, 2, 3]
+
+
+def test_section_normalizes_text_and_optional_closing_hashes() -> None:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_markdown_cell("##   Title   2   ###"),
+            nbformat.v4.new_code_cell("matched = True"),
+        ]
+    )
+    set_stable_id(notebook.cells[0], "nbctx-heading")
+    set_stable_id(notebook.cells[1], "nbctx-body")
+
+    result = section_notebook(notebook, "title 2")
+
+    assert result["section_count"] == 1
+    assert result["sections"][0]["heading"]["text"] == "Title 2"
+    assert result["sections"][0]["cells"][0]["id"] == "nbctx-body"
+
+
+def test_section_query_with_hashes_requires_matching_level() -> None:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_markdown_cell("## Title"),
+            nbformat.v4.new_code_cell("matched = True"),
+        ]
+    )
+    set_stable_id(notebook.cells[0], "nbctx-heading")
+    set_stable_id(notebook.cells[1], "nbctx-body")
+
+    result = section_notebook(notebook, "# Title")
+
+    assert result["sections"] == []
+    assert result["section_count"] == 0
+    assert result["cell_count"] == 0
+
+
+def test_section_duplicate_headings_return_in_order() -> None:
+    notebook = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_markdown_cell("## Repeat"),
+            nbformat.v4.new_code_cell("first = True"),
+            nbformat.v4.new_markdown_cell("## Repeat"),
+            nbformat.v4.new_code_cell("second = True"),
+        ]
+    )
+    for index, cell in enumerate(notebook.cells):
+        if index != 3:
+            set_stable_id(cell, f"nbctx-repeat-{index}")
+
+    result = section_notebook(notebook, "Repeat")
+
+    assert result["section_count"] == 2
+    assert result["cell_count"] == 2
+    assert [section["heading"]["index"] for section in result["sections"]] == [0, 2]
+    assert result["sections"][1]["cells"][0]["id"] is None
+
+
+def test_section_no_match_is_successful_empty_result(mixed_notebook: Path) -> None:
+    result = section_notebook(read_notebook(mixed_notebook), "Missing")
+
+    assert result["sections"] == []
+    assert result["section_count"] == 0
+    assert result["cell_count"] == 0
 
 
 def test_append_preserves_existing_output(mixed_notebook: Path) -> None:
