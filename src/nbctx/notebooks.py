@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import sys
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
@@ -26,15 +28,30 @@ class ValidationResult:
     duplicate_ids: list[str]
 
 
+@dataclass(frozen=True)
+class RepairResult:
+    changed: bool
+    changes: list[str]
+    warnings: list[str]
+
+
 def read_notebook(path: Path) -> Any:
     if not path.exists():
         raise NbctxError(f"Notebook not found: {path}")
     if not path.is_file():
         raise NbctxError(f"Notebook path is not a file: {path}")
     try:
-        return nbformat.read(path, as_version=4)
-    except Exception as exc:
+        text = path.read_text(encoding="utf-8")
+        json.loads(text)
+    except UnicodeDecodeError as exc:
         raise NbctxError(f"Could not read notebook {path}: {exc}") from exc
+    except JSONDecodeError as exc:
+        raise NbctxError(f"Invalid JSON in notebook {path}: line {exc.lineno}, column {exc.colno}: {exc.msg}") from exc
+
+    try:
+        return nbformat.reads(text, as_version=4)
+    except Exception as exc:
+        raise NbctxError(f"Notebook structure error in {path}: {exc}") from exc
 
 
 def write_notebook(path: Path, notebook: Any) -> None:
@@ -42,6 +59,83 @@ def write_notebook(path: Path, notebook: Any) -> None:
         nbformat.write(notebook, path)
     except Exception as exc:
         raise NbctxError(f"Could not write notebook {path}: {exc}") from exc
+
+
+def validate_schema(notebook: Any) -> str | None:
+    try:
+        nbformat.validate(notebook)
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
+def ensure_writable_notebook(path: Path, notebook: Any) -> RepairResult:
+    repairs = repair_notebook(notebook)
+    schema_error = validate_schema(notebook)
+    if schema_error:
+        guidance = ""
+        if repairs.changed:
+            guidance = f" Known safe repairs were applied, but additional schema issues remain. Run nbctx validate {path}"
+        raise NbctxError(f"Notebook schema/structure validation failed: {schema_error}{guidance}")
+    return repairs
+
+
+def repair_notebook(notebook: Any, apply: bool = True) -> RepairResult:
+    changes: list[str] = []
+    warnings: list[str] = []
+    cells = notebook.get("cells", [])
+    for cell_index, cell in enumerate(cells):
+        if cell.get("cell_type") != "code":
+            continue
+        outputs = cell.get("outputs", [])
+        if not isinstance(outputs, list):
+            warnings.append(f"Cell {cell_index} outputs are not a list; skipped stream-name repair scan")
+            continue
+        for output_index, output in enumerate(outputs):
+            if not isinstance(output, dict):
+                warnings.append(f"Cell {cell_index} output {output_index} is not an object; skipped")
+                continue
+            if output.get("output_type") != "stream":
+                continue
+            if output.get("name"):
+                continue
+            changes.append(f"Cell {cell_index} output {output_index}: set missing stream name to stdout")
+            if apply:
+                output["name"] = "stdout"
+    return RepairResult(changed=bool(changes), changes=changes, warnings=warnings)
+
+
+def repair_notebook_file(path: Path, dry_run: bool = False) -> dict[str, Any]:
+    notebook = read_notebook(path)
+    target = deepcopy(notebook) if dry_run else notebook
+    repairs = repair_notebook(target)
+    warnings = list(repairs.warnings)
+    schema_error = validate_schema(target)
+    if schema_error and dry_run:
+        warnings.append(f"Additional notebook schema/structure issues remain: {schema_error}")
+    if schema_error and not dry_run:
+        if repairs.changed:
+            raise NbctxError(f"Notebook schema/structure validation failed after repair: {schema_error}")
+        raise NbctxError(f"Notebook schema/structure validation failed; no known safe repairs apply: {schema_error}")
+    if not dry_run and repairs.changed:
+        write_notebook(path, target)
+    result = {
+        "ok": True,
+        "action": "repair",
+        "changed": repairs.changed,
+        "changes": repairs.changes,
+        "warnings": warnings,
+    }
+    result["markdown"] = render_repair_markdown(path, result, dry_run)
+    return result
+
+
+def repairs_to_dict(repairs: RepairResult) -> dict[str, Any]:
+    return {
+        "changed": repairs.changed,
+        "changes": repairs.changes,
+        "warnings": repairs.warnings,
+    }
 
 
 def stable_id(cell: Any) -> str | None:
@@ -231,10 +325,12 @@ def validate_notebook(path: Path) -> ValidationResult:
     duplicate_ids: list[str] = []
     notebook = read_notebook(path)
 
-    try:
-        nbformat.validate(notebook)
-    except Exception as exc:
-        errors.append(f"Notebook schema validation failed: {exc}")
+    schema_error = validate_schema(notebook)
+    if schema_error:
+        errors.append(f"Notebook schema/structure validation failed: {schema_error}")
+        repairs = repair_notebook(notebook, apply=False)
+        if repairs.changed:
+            warnings.append(f"Known safe repairs are available. Run nbctx repair {path}")
 
     seen: set[str] = set()
     duplicated_seen: set[str] = set()
@@ -284,36 +380,49 @@ def validation_to_dict(result: ValidationResult) -> dict[str, Any]:
 
 def append_cell(path: Path, cell_type: str, source: str) -> dict[str, Any]:
     notebook = read_notebook(path)
+    repairs = ensure_writable_notebook(path, notebook)
     used = existing_ids(notebook)
     cell = make_cell(cell_type, source, used)
     notebook.cells.append(cell)
     write_notebook(path, notebook)
-    return {"ok": True, "action": "append", "cell": cell_record(len(notebook.cells) - 1, cell)}
+    result = {"ok": True, "action": "append", "cell": cell_record(len(notebook.cells) - 1, cell)}
+    if repairs.changed:
+        result["repairs"] = repairs_to_dict(repairs)
+    return result
 
 
 def insert_cell(path: Path, after_id: str, cell_type: str, source: str) -> dict[str, Any]:
     notebook = read_notebook(path)
+    repairs = ensure_writable_notebook(path, notebook)
     target_index, _ = find_cell(notebook, after_id)
     used = existing_ids(notebook)
     cell = make_cell(cell_type, source, used)
     insert_index = target_index + 1
     notebook.cells.insert(insert_index, cell)
     write_notebook(path, notebook)
-    return {"ok": True, "action": "insert", "after": after_id, "cell": cell_record(insert_index, cell)}
+    result = {"ok": True, "action": "insert", "after": after_id, "cell": cell_record(insert_index, cell)}
+    if repairs.changed:
+        result["repairs"] = repairs_to_dict(repairs)
+    return result
 
 
 def replace_cell_source(path: Path, cell_id: str, source: str) -> dict[str, Any]:
     notebook = read_notebook(path)
+    repairs = ensure_writable_notebook(path, notebook)
     index, cell = find_cell(notebook, cell_id)
     cell["source"] = source
     write_notebook(path, notebook)
-    return {"ok": True, "action": "replace", "cell": cell_record(index, cell)}
+    result = {"ok": True, "action": "replace", "cell": cell_record(index, cell)}
+    if repairs.changed:
+        result["repairs"] = repairs_to_dict(repairs)
+    return result
 
 
 def index_notebook(path: Path) -> dict[str, Any]:
     notebook = read_notebook(path)
+    repairs = ensure_writable_notebook(path, notebook)
     added_ids = ensure_stable_ids(notebook)
-    if added_ids:
+    if added_ids or repairs.changed:
         write_notebook(path, notebook)
 
     records = [cell_record(index, cell) for index, cell in enumerate(notebook.cells)]
@@ -330,7 +439,7 @@ def index_notebook(path: Path) -> dict[str, Any]:
     if not notes_path.exists():
         notes_path.write_text("# Notes\n\n", encoding="utf-8")
 
-    return {
+    result = {
         "ok": True,
         "notebook": str(path),
         "added_ids": added_ids,
@@ -340,6 +449,9 @@ def index_notebook(path: Path) -> dict[str, Any]:
         "notes": str(notes_path),
         "markdown": summary,
     }
+    if repairs.changed:
+        result["repairs"] = repairs_to_dict(repairs)
+    return result
 
 
 def render_inspect_markdown(result: dict[str, Any]) -> str:
@@ -402,6 +514,24 @@ def render_validation_markdown(result: dict[str, Any]) -> str:
     if result["errors"]:
         lines.extend(["", "## Errors"])
         lines.extend(f"- {error}" for error in result["errors"])
+    if result["warnings"]:
+        lines.extend(["", "## Warnings"])
+        lines.extend(f"- {warning}" for warning in result["warnings"])
+    return "\n".join(lines) + "\n"
+
+
+def render_repair_markdown(path: Path, result: dict[str, Any], dry_run: bool) -> str:
+    mode = "Dry run" if dry_run else "Applied"
+    lines = [
+        "# Repair",
+        "",
+        f"- Notebook: `{path}`",
+        f"- Mode: {mode}",
+        f"- Changed: {result['changed']}",
+    ]
+    if result["changes"]:
+        lines.extend(["", "## Changes"])
+        lines.extend(f"- {change}" for change in result["changes"])
     if result["warnings"]:
         lines.extend(["", "## Warnings"])
         lines.extend(f"- {warning}" for warning in result["warnings"])

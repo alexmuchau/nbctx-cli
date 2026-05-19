@@ -76,6 +76,12 @@ Validate notebook safety:
 nbctx validate notebook.ipynb
 ```
 
+Repair known safe notebook inconsistencies:
+
+```bash
+nbctx repair notebook.ipynb
+```
+
 ## Commands
 
 ### `inspect`
@@ -154,6 +160,24 @@ Check that the notebook is readable, has valid cell structure, and does not cont
 nbctx validate notebook.ipynb
 ```
 
+Schema/structure errors are reported separately from malformed JSON. When `nbctx` recognizes a safe repair, validation output includes guidance to run `nbctx repair`.
+
+### `repair`
+
+Repair known safe notebook inconsistencies without executing notebook code.
+
+```bash
+nbctx repair notebook.ipynb
+```
+
+Preview repairs without writing:
+
+```bash
+nbctx repair notebook.ipynb --dry-run
+```
+
+The first repair rule fixes code-cell `stream` outputs that are missing a `name` field by setting `name` to `"stdout"`. Existing output text, metadata, execution counts, cell ordering, and stable nbctx IDs are preserved.
+
 ### `index`
 
 Add stable nbctx IDs to cells that are missing them and generate lightweight context files under `.notebook-cli/`.
@@ -218,3 +242,5 @@ For manual work or agent workflows:
 5. Run `nbctx validate notebook.ipynb`.
 
 This keeps edits targeted and avoids relying on fragile cell indexes.
+
+Edit commands (`append`, `insert`, and `replace`) and `index` automatically apply known safe repairs before writing. If a notebook has schema issues that `nbctx` cannot safely repair, the command fails with a notebook schema/structure error instead of treating the file as malformed JSON.
